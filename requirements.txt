@@ -1,0 +1,12 @@
+# VideomappingART - Ríos Interactivos
+# Dependencias necesarias para detección de manos y videomapping
+
+# Visión computacional y detección de manos
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+
+# Motor de juegos y gráficos
+pygame>=2.5.0
+
+# Matemáticas y arrays
+numpy>=1.24.0 
