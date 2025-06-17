@@ -4,9 +4,6 @@ Sistema de videomapping interactivo con detección de movimiento que contrasta d
 
 Exploración artística e investigativa de las agencias humanas/más-que-humanas en paisajes del Antropoceno, contrastando:
 
-- **MAPOCHO CANALIZADO**: Río urbano constricto - respuesta dramática a la interacción
-- **MAIPO ABIERTO**: Río "natural" libre - movimiento sutil y orgánico
-
 ## Controles
 
 | Acción | Control |
