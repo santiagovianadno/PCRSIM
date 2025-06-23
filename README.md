@@ -38,14 +38,6 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Ejecuta la simulación simple (sin cámara web):
+Ejecuta la simulación
 
-```bash
-python pcr_simple_simulation.py
-```
-
-Ejecuta la versión completa con interacción de manos (requiere cámara web):
-
-```bash
-python pcr_advanced_simulation.py
-```
+py 3-10 basteria_mediapipe.py 
