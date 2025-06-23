@@ -1,12 +1,23 @@
-# VideomappingART - Ríos Interactivos
-# Dependencias necesarias para detección de manos y videomapping
+# VideomappingART - PCR Termophilic Cells Interactive
+# Dependencias necesarias para simulación de PCR y videomapping
 
 # Visión computacional y detección de manos
 opencv-python>=4.8.0
-mediapipe>=0.10.0
+# mediapipe>=0.10.0  # Opcional - no compatible con Python 3.13
 
 # Motor de juegos y gráficos
 pygame>=2.5.0
 
 # Matemáticas y arrays
-numpy>=1.24.0 
+numpy>=1.24.0
+
+# 3D Graphics y PLY handling
+pyopengl>=3.1.6
+plyfile>=0.7.4
+
+# Efectos visuales y animaciones
+scipy>=1.10.0
+matplotlib>=3.7.0
+
+# Utilidades adicionales
+pillow>=9.5.0 

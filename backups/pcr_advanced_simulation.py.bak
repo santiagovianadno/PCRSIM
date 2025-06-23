@@ -1,0 +1,568 @@
+#!/usr/bin/env python3
+"""
+PCR Advanced Simulation - Versión avanzada con PLY y efectos visuales
+Simulación completa del proceso de PCR con células termófilas 3D
+"""
+
+import pygame
+import cv2
+import mediapipe as mp
+import numpy as np
+import sys
+import os
+import math
+import random
+from typing import List, Tuple, Optional, Dict, Any
+from OpenGL.GL import *
+from OpenGL.GLU import *
+
+# Importar nuestro renderizador PLY
+from ply_cell_renderer import ThermophilicCellRenderer, CellFactory, PLYCellModel
+
+# Configuración de MediaPipe
+mp_hands = mp.solutions.hands
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+
+class PCRStage:
+    """Estados del proceso de PCR con información detallada"""
+    DENATURATION = "denaturation"
+    ANNEALING = "annealing"
+    EXTENSION = "extension"
+    COOLING = "cooling"
+    
+    @staticmethod
+    def get_temperature(stage: str) -> float:
+        """Obtiene la temperatura objetivo para cada etapa"""
+        temps = {
+            PCRStage.DENATURATION: 94.0,
+            PCRStage.ANNEALING: 55.0,
+            PCRStage.EXTENSION: 72.0,
+            PCRStage.COOLING: 25.0
+        }
+        return temps.get(stage, 25.0)
+    
+    @staticmethod
+    def get_duration(stage: str) -> float:
+        """Obtiene la duración típica de cada etapa"""
+        durations = {
+            PCRStage.DENATURATION: 30.0,  # 30 segundos
+            PCRStage.ANNEALING: 30.0,     # 30 segundos
+            PCRStage.EXTENSION: 60.0,     # 1 minuto
+            PCRStage.COOLING: 10.0        # 10 segundos
+        }
+        return durations.get(stage, 10.0)
+
+class AdvancedThermophilicCell:
+    """Célula termófila avanzada con características específicas"""
+    
+    def __init__(self, cell_type: str, position: np.ndarray):
+        self.cell_type = cell_type
+        self.position = position.copy()
+        self.original_position = position.copy()
+        self.velocity = np.zeros(3)
+        self.temperature = 25.0
+        self.energy = 100.0
+        self.active = True
+        self.division_count = 0
+        self.max_divisions = 3
+        
+        # Características específicas por tipo
+        self.setup_cell_properties()
+        
+        # Animación
+        self.rotation = np.array([0.0, 0.0, 0.0])
+        self.rotation_speed = np.random.uniform(0.5, 2.0, 3)
+        self.pulse_phase = random.uniform(0, 2 * math.pi)
+        
+    def setup_cell_properties(self):
+        """Configura las propiedades específicas de cada tipo de célula"""
+        if self.cell_type == "thermus_aquaticus":
+            self.optimal_temp = 70.0
+            self.max_temp = 80.0
+            self.base_color = (0.8, 0.6, 0.2)
+            self.size = 1.2
+            self.energy_efficiency = 0.9
+            self.division_threshold = 85.0
+        elif self.cell_type == "pyrococcus_furiosus":
+            self.optimal_temp = 100.0
+            self.max_temp = 105.0
+            self.base_color = (0.8, 0.2, 0.2)
+            self.size = 1.0
+            self.energy_efficiency = 0.95
+            self.division_threshold = 95.0
+        elif self.cell_type == "thermococcus_litoralis":
+            self.optimal_temp = 88.0
+            self.max_temp = 98.0
+            self.base_color = (0.6, 0.8, 0.2)
+            self.size = 0.8
+            self.energy_efficiency = 0.85
+            self.division_threshold = 90.0
+        else:
+            # Célula genérica
+            self.optimal_temp = 70.0
+            self.max_temp = 80.0
+            self.base_color = (0.2, 0.8, 0.2)
+            self.size = 1.0
+            self.energy_efficiency = 0.8
+            self.division_threshold = 80.0
+    
+    def update(self, dt: float, pcr_stage: str, hand_positions: List[Tuple[float, float, float]]):
+        """Actualiza el estado de la célula"""
+        
+        # Actualizar temperatura según etapa de PCR
+        target_temp = PCRStage.get_temperature(pcr_stage)
+        temp_diff = target_temp - self.temperature
+        self.temperature += temp_diff * dt * 2.0
+        
+        # Interacción con manos
+        self.handle_hand_interaction(hand_positions, dt)
+        
+        # Consumo de energía
+        self.update_energy(dt)
+        
+        # División celular
+        self.check_division()
+        
+        # Animación
+        self.update_animation(dt)
+        
+        # Física simple
+        self.update_physics(dt)
+    
+    def handle_hand_interaction(self, hand_positions: List[Tuple[float, float, float]], dt: float):
+        """Maneja la interacción con las manos"""
+        for hand_pos in hand_positions:
+            hand_x, hand_y, hand_z = hand_pos
+            distance = np.linalg.norm(self.position - np.array([hand_x, hand_y, hand_z]))
+            
+            if distance < 3.0:  # Radio de influencia
+                # Repulsión suave
+                direction = self.position - np.array([hand_x, hand_y, hand_z])
+                direction = direction / (np.linalg.norm(direction) + 0.1)
+                self.velocity += direction * dt * 2.0
+                
+                # Activación por contacto
+                if distance < 1.0:
+                    self.energy = min(100.0, self.energy + 15.0 * dt)
+                    self.active = True
+    
+    def update_energy(self, dt: float):
+        """Actualiza el nivel de energía de la célula"""
+        if self.active:
+            # Consumo base
+            energy_consumption = 3.0 * dt
+            
+            # Consumo adicional por temperatura alta
+            if self.temperature > self.optimal_temp:
+                energy_consumption *= (1.0 + (self.temperature - self.optimal_temp) / 20.0)
+            
+            self.energy -= energy_consumption
+            
+            if self.energy <= 0:
+                self.active = False
+                self.energy = 0.0
+    
+    def check_division(self):
+        """Verifica si la célula debe dividirse"""
+        if (self.active and self.energy > 80.0 and 
+            self.temperature > self.division_threshold and 
+            self.division_count < self.max_divisions):
+            
+            # Probabilidad de división
+            if random.random() < 0.01:  # 1% por frame
+                self.division_count += 1
+                self.energy *= 0.5  # Consume energía para dividirse
+                return True
+        return False
+    
+    def update_animation(self, dt: float):
+        """Actualiza las animaciones de la célula"""
+        # Rotación
+        self.rotation += self.rotation_speed * dt
+        
+        # Pulso de energía
+        self.pulse_phase += dt * 3.0
+    
+    def update_physics(self, dt: float):
+        """Actualiza la física de la célula"""
+        # Aplicar velocidad
+        self.position += self.velocity * dt
+        
+        # Fricción
+        self.velocity *= 0.95
+        
+        # Límites del espacio
+        for i in range(3):
+            if abs(self.position[i]) > 10.0:
+                self.velocity[i] *= -0.5
+                self.position[i] = np.sign(self.position[i]) * 10.0
+    
+    def get_color(self) -> Tuple[float, float, float]:
+        """Obtiene el color actual de la célula basado en su estado"""
+        if not self.active:
+            return (0.5, 0.5, 0.5)  # Gris para células inactivas
+        
+        # Color base modificado por temperatura
+        temp_factor = (self.temperature - 25.0) / 70.0
+        temp_factor = max(0.0, min(1.0, temp_factor))
+        
+        # Interpolación de color
+        if temp_factor < 0.5:
+            # Verde a amarillo
+            t = temp_factor * 2.0
+            return (
+                self.base_color[0] * (1 - t) + 0.8 * t,
+                self.base_color[1] * (1 - t) + 0.8 * t,
+                self.base_color[2] * (1 - t) + 0.2 * t
+            )
+        else:
+            # Amarillo a rojo
+            t = (temp_factor - 0.5) * 2.0
+            return (
+                0.8 * (1 - t) + 0.8 * t,
+                0.8 * (1 - t) + 0.2 * t,
+                0.2 * (1 - t) + 0.2 * t
+            )
+
+class AdvancedPCRSimulation:
+    """Simulación avanzada de PCR con células termófilas 3D"""
+    
+    def __init__(self, width: int = 1280, height: int = 720):
+        pygame.init()
+        self.width = width
+        self.height = height
+        self.screen = pygame.display.set_mode((width, height), pygame.OPENGL | pygame.DOUBLEBUF)
+        pygame.display.set_caption("PCR Advanced - Termophilic Cells Interactive")
+        
+        # Configuración de OpenGL
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glClearColor(0.0, 0.0, 0.1, 1.0)
+        glEnable(GL_LIGHTING)
+        glEnable(GL_LIGHT0)
+        glEnable(GL_COLOR_MATERIAL)
+        
+        # Cámara
+        self.camera_distance = 15.0
+        self.camera_rotation_x = 0.0
+        self.camera_rotation_y = 0.0
+        self.camera_target = np.array([0.0, 0.0, 0.0])
+        
+        # PCR
+        self.current_stage = PCRStage.COOLING
+        self.stage_timer = 0.0
+        self.cycle_count = 0
+        self.max_cycles = 30
+        self.auto_advance = True
+        
+        # Células
+        self.cells: List[AdvancedThermophilicCell] = []
+        self.generate_cells()
+        
+        # Renderizador PLY
+        self.renderer = ThermophilicCellRenderer()
+        self.load_cell_models()
+        
+        # MediaPipe
+        self.cap = cv2.VideoCapture(0)
+        self.hands = mp_hands.Hands(
+            model_complexity=1,
+            min_detection_confidence=0.7,
+            min_tracking_confidence=0.7,
+            max_num_hands=2
+        )
+        
+        # Efectos
+        self.show_camera = True
+        self.paused = False
+        self.show_dna = True
+        self.show_particles = True
+        
+        # Estadísticas
+        self.stats = {
+            'total_cells': 0,
+            'active_cells': 0,
+            'divisions': 0,
+            'avg_temperature': 25.0
+        }
+    
+    def generate_cells(self):
+        """Genera una población diversa de células termófilas"""
+        cell_types = ["thermus_aquaticus", "pyrococcus_furiosus", "thermococcus_litoralis"]
+        
+        for _ in range(30):
+            cell_type = random.choice(cell_types)
+            position = np.random.uniform(-8, 8, 3)
+            self.cells.append(AdvancedThermophilicCell(cell_type, position))
+        
+        self.stats['total_cells'] = len(self.cells)
+    
+    def load_cell_models(self):
+        """Carga los modelos PLY de células"""
+        try:
+            self.renderer.load_cell_model("default", "models/thermophilic_cell.ply")
+        except:
+            print("Modelo PLY no encontrado, usando geometría por defecto")
+    
+    def handle_events(self):
+        """Maneja eventos de pygame"""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return False
+                elif event.key == pygame.K_SPACE:
+                    self.next_pcr_stage()
+                elif event.key == pygame.K_c:
+                    self.show_camera = not self.show_camera
+                elif event.key == pygame.K_p:
+                    self.paused = not self.paused
+                elif event.key == pygame.K_r:
+                    self.reset_simulation()
+                elif event.key == pygame.K_a:
+                    self.auto_advance = not self.auto_advance
+                elif event.key == pygame.K_d:
+                    self.show_dna = not self.show_dna
+                elif event.key == pygame.K_t:
+                    self.show_particles = not self.show_particles
+            elif event.type == pygame.MOUSEMOTION:
+                if event.buttons[0]:  # Botón izquierdo
+                    self.camera_rotation_y += event.rel[0] * 0.01
+                    self.camera_rotation_x += event.rel[1] * 0.01
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 4:  # Scroll up
+                    self.camera_distance = max(5.0, self.camera_distance - 1.0)
+                elif event.button == 5:  # Scroll down
+                    self.camera_distance = min(30.0, self.camera_distance + 1.0)
+        
+        return True
+    
+    def next_pcr_stage(self):
+        """Avanza a la siguiente etapa del PCR"""
+        if self.current_stage == PCRStage.COOLING:
+            self.current_stage = PCRStage.DENATURATION
+        elif self.current_stage == PCRStage.DENATURATION:
+            self.current_stage = PCRStage.ANNEALING
+        elif self.current_stage == PCRStage.ANNEALING:
+            self.current_stage = PCRStage.EXTENSION
+        elif self.current_stage == PCRStage.EXTENSION:
+            self.current_stage = PCRStage.COOLING
+            self.cycle_count += 1
+        
+        self.stage_timer = 0.0
+    
+    def reset_simulation(self):
+        """Reinicia la simulación"""
+        self.current_stage = PCRStage.COOLING
+        self.stage_timer = 0.0
+        self.cycle_count = 0
+        
+        # Reiniciar células
+        for cell in self.cells:
+            cell.temperature = 25.0
+            cell.energy = 100.0
+            cell.active = True
+            cell.position = cell.original_position.copy()
+            cell.velocity = np.zeros(3)
+            cell.division_count = 0
+    
+    def process_hand_tracking(self):
+        """Procesa el tracking de manos"""
+        ret, frame = self.cap.read()
+        if not ret:
+            return []
+        
+        frame = cv2.flip(frame, 1)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.hands.process(rgb_frame)
+        
+        hand_positions = []
+        
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                palm = hand_landmarks.landmark[9]
+                x = (palm.x - 0.5) * 20
+                y = (0.5 - palm.y) * 10
+                z = palm.z * 15
+                hand_positions.append((x, y, z))
+                
+                if self.show_camera:
+                    mp_drawing.draw_landmarks(
+                        frame, hand_landmarks, mp_hands.HAND_CONNECTIONS,
+                        mp_drawing_styles.get_default_hand_landmarks_style(),
+                        mp_drawing_styles.get_default_hand_connections_style()
+                    )
+        
+        if self.show_camera:
+            small_frame = cv2.resize(frame, (320, 240))
+            frame_surface = pygame.surfarray.make_surface(small_frame.swapaxes(0, 1))
+            self.screen.blit(frame_surface, (10, 10))
+        
+        return hand_positions
+    
+    def update(self, dt: float):
+        """Actualiza la simulación"""
+        if self.paused:
+            return
+        
+        # Actualizar timer y auto-avanzar
+        self.stage_timer += dt
+        if self.auto_advance and self.stage_timer >= PCRStage.get_duration(self.current_stage):
+            self.next_pcr_stage()
+        
+        # Procesar manos
+        hand_positions = self.process_hand_tracking()
+        
+        # Actualizar células
+        active_cells = 0
+        total_temp = 0.0
+        divisions = 0
+        
+        for cell in self.cells:
+            cell.update(dt, self.current_stage, hand_positions)
+            
+            if cell.active:
+                active_cells += 1
+                total_temp += cell.temperature
+                divisions += cell.division_count
+        
+        # Actualizar estadísticas
+        self.stats['active_cells'] = active_cells
+        self.stats['divisions'] = divisions
+        if active_cells > 0:
+            self.stats['avg_temperature'] = total_temp / active_cells
+        
+        # Actualizar renderizador
+        self.renderer.update(dt)
+    
+    def render_cells(self):
+        """Renderiza las células usando el renderizador PLY"""
+        for cell in self.cells:
+            if "default" in self.renderer.cell_models:
+                model = self.renderer.cell_models["default"]
+                color = cell.get_color()
+                
+                self.renderer.render_cell_model(
+                    model, cell.position, cell.size, cell.rotation, color, cell.temperature
+                )
+        
+        # Renderizar partículas de energía
+        if self.show_particles:
+            self.renderer.render_energy_particles()
+    
+    def render_dna_visualization(self):
+        """Renderiza la visualización del DNA"""
+        if not self.show_dna:
+            return
+        
+        glPushMatrix()
+        glTranslatef(0, 0, -5)
+        
+        if self.current_stage == PCRStage.DENATURATION:
+            self.renderer.render_dna_strands("denaturation")
+        elif self.current_stage == PCRStage.ANNEALING:
+            self.renderer.render_dna_strands("annealing")
+        elif self.current_stage == PCRStage.EXTENSION:
+            self.renderer.render_dna_strands("extension")
+        
+        glPopMatrix()
+    
+    def render_ui(self):
+        """Renderiza la interfaz de usuario"""
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(0, self.width, 0, self.height)
+        
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glDisable(GL_DEPTH_TEST)
+        
+        font = pygame.font.Font(None, 36)
+        small_font = pygame.font.Font(None, 24)
+        
+        # Información principal
+        texts = [
+            f"Etapa: {self.current_stage.upper()}",
+            f"Ciclo: {self.cycle_count}/{self.max_cycles}",
+            f"Temperatura: {self.stats['avg_temperature']:.1f}°C",
+            f"Células Activas: {self.stats['active_cells']}/{self.stats['total_cells']}",
+            f"Divisiones: {self.stats['divisions']}"
+        ]
+        
+        for i, text in enumerate(texts):
+            surface = font.render(text, True, (255, 255, 255))
+            self.screen.blit(surface, (10, self.height - 120 + i * 25))
+        
+        # Controles
+        controls = [
+            "ESPACIO: Siguiente etapa",
+            "R: Reiniciar",
+            "P: Pausar/Reanudar",
+            "C: Mostrar/Ocultar cámara",
+            "A: Auto-avance",
+            "D: Mostrar/Ocultar DNA",
+            "T: Mostrar/Ocultar partículas"
+        ]
+        
+        for i, control in enumerate(controls):
+            surface = small_font.render(control, True, (200, 200, 200))
+            self.screen.blit(surface, (self.width - 300, 10 + i * 20))
+        
+        # Restaurar configuración 3D
+        glEnable(GL_DEPTH_TEST)
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+    
+    def render(self):
+        """Renderiza la escena completa"""
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        
+        # Configurar cámara
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        gluPerspective(45, self.width / self.height, 0.1, 100.0)
+        
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        glTranslatef(0.0, 0.0, -self.camera_distance)
+        glRotatef(self.camera_rotation_x, 1.0, 0.0, 0.0)
+        glRotatef(self.camera_rotation_y, 0.0, 1.0, 0.0)
+        
+        # Renderizar células
+        self.render_cells()
+        
+        # Renderizar DNA
+        self.render_dna_visualization()
+        
+        # Renderizar UI
+        self.render_ui()
+        
+        pygame.display.flip()
+    
+    def run(self):
+        """Bucle principal"""
+        clock = pygame.time.Clock()
+        running = True
+        
+        while running:
+            dt = clock.tick(60) / 1000.0
+            
+            running = self.handle_events()
+            self.update(dt)
+            self.render()
+        
+        self.cap.release()
+        cv2.destroyAllWindows()
+        pygame.quit()
+        sys.exit()
+
+if __name__ == "__main__":
+    simulation = AdvancedPCRSimulation()
+    simulation.run() 
