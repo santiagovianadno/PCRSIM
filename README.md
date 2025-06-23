@@ -40,4 +40,4 @@ pip install -r requirements.txt
 
 Ejecuta la simulación
 
-py 3-10 basteria_mediapipe.py 
+py -3.10 basteria_mediapipe.py
