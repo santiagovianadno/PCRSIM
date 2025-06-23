@@ -6,13 +6,30 @@ Proyecto académico desarrollado para el curso "Desafíos en las Ciencias Bioló
 
 | Acción | Tecla / Acción |
 |--------|----------------|
-| Interactuar con células | Mouse (versión simple) / Manos (versión completa) |
-| Siguiente etapa PCR | `ESPACIO` |
-| Reiniciar simulación | `R` |
-| Pausar / Reanudar | `P` |
+| Interactuar con células | Manos |
+| Mostrar/Ocultar ventana de cámara | `C` |
+| Activar/Desactivar control de manos | `H` |
+| Cambiar velocidad rotación automática | `A` |
+| Reiniciar posición de cámara | `R` |
 | Rotar cámara | Arrastrar mouse |
 | Zoom | Rueda del mouse |
 | Salir | `ESC` |
+
+## Gestos
+
+ MANO DERECHA:
+    Mover palma = Rotar modelo
+    Pinch = Controlar zoom
+
+ MANO IZQUIERDA:
+   (Etapa 1)  Juntar dedos = VIBRACIÓN + ROJO + TRANSPARENCIA
+   (Etapa 1)  Separar dedos = NORMAL + BLANCO + OPACO
+   (Etapa 3)  Juntar dedos = Separar/Unir Polimerasa
+
+ GESTOS ADICIONALES:
+   (Todos los modos)  Toca tu palma izquierda con el índice derecho para ciclar de nivel
+   (Etapa 2)  Manos separadas/juntas = Separar/Unir hebras de ADN
+   (Etapa 4)  Mueve la mano izquierda para replicar fragmentos de ADN
 
 ## Instalación (Python 3.10)
 
