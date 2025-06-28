@@ -3,7 +3,7 @@
 
 # Visión computacional y detección de manos
 opencv-python>=4.8.0
-# mediapipe>=0.10.0  # Opcional - no compatible con Python 3.13
+mediapipe>=0.10.0
 
 # Motor de juegos y gráficos
 pygame>=2.5.0
@@ -12,12 +12,18 @@ pygame>=2.5.0
 numpy>=1.24.0
 
 # 3D Graphics y PLY handling
-pyopengl>=3.1.6
+PyOpenGL>=3.1.6
+PyOpenGL_accelerate>=3.1.6  # (opcional, acelera OpenGL, se omite si falla la instalación)
 plyfile>=0.7.4
 
 # Efectos visuales y animaciones
-scipy>=1.10.0
-matplotlib>=3.7.0
+# Las siguientes bibliotecas no son imprescindibles para el visor principal,
+# pero se usaron en scripts de ejemplo/test.  Déjalas comentadas u opcionales.
+# scipy>=1.10.0
+# matplotlib>=3.7.0
+# pillow>=9.5.0
 
 # Utilidades adicionales
-pillow>=9.5.0 
+# scipy>=1.10.0
+# matplotlib>=3.7.0
+# pillow>=9.5.0 

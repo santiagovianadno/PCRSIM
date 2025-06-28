@@ -1,60 +1,56 @@
 # PCRSIM
 
-Proyecto académico desarrollado para el curso "Desafíos en las Ciencias Biológicas y el Diseño, BIO356D-1". Este sistema de videomapping interactivo simula el proceso de PCR (Reacción en Cadena de la Polimerasa) usando células termófilas como protagonistas.
+Visualizador interactivo del proceso de PCR con detección de manos. Requiere Python 3.10, OpenGL y una webcam.
 
-## Controles
-
-| Acción | Tecla / Acción |
-|--------|----------------|
-| Interactuar con células | Manos |
-| Mostrar/Ocultar ventana de cámara | `C` |
-| Activar/Desactivar control de manos | `H` |
-| Cambiar velocidad rotación automática | `A` |
-| Reiniciar posición de cámara | `R` |
-| Rotar cámara | Arrastrar mouse |
-| Zoom | Rueda del mouse |
-| Salir | `ESC` |
-
-## Gestos
-
- MANO DERECHA:
-    Mover palma = Rotar modelo
-    Pinch = Controlar zoom
-
- MANO IZQUIERDA:
-   (Etapa 1)  Juntar dedos = VIBRACIÓN + ROJO + TRANSPARENCIA
-   (Etapa 1)  Separar dedos = NORMAL + BLANCO + OPACO
-   (Etapa 3)  Juntar dedos = Separar/Unir Polimerasa
-
- GESTOS ADICIONALES:
-   (Todos los modos)  Toca tu palma izquierda con el índice derecho para ciclar de nivel
-   (Etapa 2)  Manos separadas/juntas = Separar/Unir hebras de ADN
-   (Etapa 4)  Mueve la mano izquierda para replicar fragmentos de ADN
-
-## Instalación (Python 3.10)
-
-Requisitos previos:
-- Python 3.10
-- Tarjeta gráfica compatible con OpenGL
-
-Pasos recomendados:
-
+## Instalación rápida
 ```bash
-# 1. Clona el repositorio
-git clone https://github.com/<TU-USUARIO>/PCRSIM.git
-cd PCRSIM
-
-# 2. Crea y activa un entorno virtual (opcional pero recomendado)
 python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
-
-# 3. Instala las dependencias
+venv\Scripts\activate      # Windows
+# o source venv/bin/activate  # macOS / Linux
 pip install -r requirements.txt
 ```
 
-Ejecuta la simulación
-
+## Ejecución
+```bash
+python basteria_mediapipe.py
+# Windows (si has añadido Python 3.10 al launcher)
 py -3.10 basteria_mediapipe.py
+```
+
+## Controles de teclado
+| Tecla | Función |
+|-------|---------|
+| C | Mostrar/ocultar ventana de cámara |
+| H | Activar/desactivar control de manos |
+| A | Ciclar velocidad de rotación automática |
+| R | Reiniciar posición de cámara |
+| F | Pantalla completa |
+| Ratón botón izq. | Rotar modelo |
+| Rueda ratón | Zoom |
+| ESC | Salir |
+
+## Gestos de mano
+| Etapa | Mano | Gesto | Efecto |
+|-------|------|-------|--------|
+| Todas | Derecha | Palma en movimiento | Rotar escena |
+| Todas | Derecha | Pinch | Zoom |
+| 1 (Bacteria) | Izquierda | Pinch cerrado | Vibración, color rojo, transparencia |
+| 1 | Izquierda | Pinch abierto | Estado normal |
+| 2 (ADN) | Izquierda | Pinch | Separar/unir hebras de ADN |
+| 3 (Enzima) | Izquierda | Pinch | Acercar/alejar polimerasa al ADN |
+| 4 (PCR) | Izquierda | Pinch cerrado | Centrifugado (rotación rápida) |
+| 4 | Izquierda | Movimiento | Generar fragmentos de ADN |
+| Todas | Ambas | Índice derecho toca palma izquierda | Cambiar de etapa |
+
+## Modelos utilizados
+Los archivos `.ply` se encuentran en `models/`.
+
+## Dependencias principales
+- opencv-python
+- mediapipe
+- pygame
+- numpy
+- PyOpenGL
+- plyfile
+
+Las dependencias opcionales aparecen comentadas en `requirements.txt`.

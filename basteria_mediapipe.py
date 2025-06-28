@@ -496,14 +496,33 @@ class BasteriaViewerMediaPipe :
 
             if self .gesture_cooldown ==0 :
                 if left_hand_landmarks and right_hand_landmarks :
-
-                    p1 =right_hand_landmarks .landmark [mp_hands .HandLandmark .INDEX_FINGER_TIP ]
-
-                    p2 =left_hand_landmarks .landmark [mp_hands .HandLandmark .WRIST ]
-
-                    touch_distance =self .calculate_landmark_distance (p1 ,p2 )
-                    if touch_distance <self .touch_threshold :
-                        self .cycle_state ()
+                    # Get right hand index finger tip
+                    p1 = right_hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+                    
+                    # Calculate left palm center (more accurate than wrist)
+                    # Palm center is approximately between WRIST and MIDDLE_FINGER_MCP
+                    wrist = left_hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+                    middle_mcp = left_hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
+                    palm_center_x = (wrist.x + middle_mcp.x) / 2
+                    palm_center_y = (wrist.y + middle_mcp.y) / 2
+                    palm_center_z = (wrist.z + middle_mcp.z) / 2
+                    
+                    # Create a pseudo-landmark for palm center
+                    class PalmPoint:
+                        def __init__(self, x, y, z):
+                            self.x, self.y, self.z = x, y, z
+                    
+                    palm_center = PalmPoint(palm_center_x, palm_center_y, palm_center_z)
+                    
+                    # Calculate 2D distance (more reliable than 3D)
+                    touch_distance_2d = math.sqrt((p1.x - palm_center.x)**2 + (p1.y - palm_center.y)**2)
+                    
+                    # Increased threshold for better usability
+                    touch_threshold_2d = 0.12  # Increased from 0.06
+                    
+                    if touch_distance_2d < touch_threshold_2d:
+                        print(f"🎯 Palm touch detected! Distance: {touch_distance_2d:.3f}")
+                        self.cycle_state()
 
 
             if self .state =='ADN':
@@ -513,7 +532,7 @@ class BasteriaViewerMediaPipe :
                     hand_dist =abs (right_hand_pos [0 ]-left_hand_pos [0 ])
 
 
-                    self .hand_separation =np .interp (hand_dist ,[0.25 ,0.8 ],[0.0 ,1.0 ])
+                    self .hand_separation =np .interp (hand_dist ,[0.35 ,0.6 ],[0.0 ,1.0 ])
                 else :
 
                     self .hand_separation =0.0
@@ -532,6 +551,37 @@ class BasteriaViewerMediaPipe :
                 color =(255 ,0 ,0 )if handedness .classification [0 ].label =='Right'else (0 ,255 ,0 )
                 mp_drawing .draw_landmarks (image ,hand_landmarks ,mp_hands .HAND_CONNECTIONS ,
                 landmark_drawing_spec =mp_drawing .DrawingSpec (color =color ,thickness =2 ,circle_radius =4 ))
+            
+            # Add visual feedback for palm touch detection
+            if left_hand_landmarks and right_hand_landmarks:
+                h, w, _ = image.shape
+                
+                # Draw palm center circle
+                wrist = left_hand_landmarks.landmark[mp_hands.HandLandmark.WRIST]
+                middle_mcp = left_hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
+                palm_center_x = (wrist.x + middle_mcp.x) / 2
+                palm_center_y = (wrist.y + middle_mcp.y) / 2
+                palm_center_pos = (int(palm_center_x * w), int(palm_center_y * h))
+                cv2.circle(image, palm_center_pos, 15, (255, 255, 0), 3)  # Yellow circle for palm center
+                
+                # Draw right index finger tip
+                index_tip = right_hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+                index_pos = (int(index_tip.x * w), int(index_tip.y * h))
+                cv2.circle(image, index_pos, 8, (0, 0, 255), -1)  # Red circle for index finger
+                
+                # Draw connection line and distance
+                touch_distance_2d = math.sqrt((index_tip.x - palm_center_x)**2 + (index_tip.y - palm_center_y)**2)
+                line_color = (0, 255, 0) if touch_distance_2d < 0.12 else (255, 255, 255)  # Green if close enough
+                cv2.line(image, index_pos, palm_center_pos, line_color, 2)
+                
+                # Display distance text (desactivado)
+                # cv2.putText(image, f"Distance: {touch_distance_2d:.3f}", (10, 30), 
+                #            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                # cv2.putText(image, f"Threshold: 0.12", (10, 60), 
+                #            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                # if touch_distance_2d < 0.12:
+                #     cv2.putText(image, "PALM TOUCH DETECTED!", (10, 90), 
+                #                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
         if self .show_camera :
             if self .state =='ADN':
@@ -637,6 +687,34 @@ class BasteriaViewerMediaPipe :
                     hand_velocity =dist /delta_time
             self .pcr_model .update (hand_velocity )
 
+            # --- Nuevo efecto de centrifugado ---
+            # Utilizar el gesto de pinch de la mano izquierda para aplicar una rotación
+            # rápida sobre la escena, simulando un centrifugado.
+
+            pinch_dist = self.calculate_landmark_distance(
+                hand_landmarks.landmark[4],
+                hand_landmarks.landmark[8]
+            )
+
+            # pinch_factor = 0 cuando la mano está cerrada, 1 cuando está abierta
+            pinch_factor = np.clip((pinch_dist - 0.02) / 0.12, 0.0, 1.0)
+
+            # Entre más cerrado el pinch, mayor será la rotación añadida
+            rotation_boost = (1.0 - pinch_factor) * 12.0  # grados por frame
+            self.camera_rotation_y += rotation_boost
+
+            # Visualización de la distancia (línea) para el pinch en etapa PCR
+            if self.show_camera:
+                thumb_tip = hand_landmarks.landmark[4]
+                index_tip = hand_landmarks.landmark[8]
+                h, w, _ = frame.shape
+                thumb_pos = (int(thumb_tip.x * w), int(thumb_tip.y * h))
+                index_pos = (int(index_tip.x * w), int(index_tip.y * h))
+
+                # Color basado en pinch_factor: más cerrado -> rojo, abierto -> verde
+                red = int(255 * (1.0 - pinch_factor))
+                green = int(255 * pinch_factor)
+                cv2.line(frame, thumb_pos, index_pos, (0, green, red), 3)
 
         if self .state =='BASTERIA':
             pinch_distance =self .calculate_landmark_distance (hand_landmarks .landmark [4 ],hand_landmarks .landmark [8 ])
@@ -675,10 +753,34 @@ class BasteriaViewerMediaPipe :
 
 
         if self .state =='ADN':
+            # Mapear la distancia del pinch (pulgar-índice) a un factor de separación
+            pinch_dist = self.calculate_landmark_distance(
+                hand_landmarks.landmark[4],
+                hand_landmarks.landmark[8]
+            )
 
-            pinch_dist =self .calculate_landmark_distance (hand_landmarks .landmark [4 ],hand_landmarks .landmark [8 ])
-            separation_factor =np .clip ((pinch_dist -0.02 )/0.15 ,0 ,1 )
-            self .adn_model .separate_strands (separation_factor )
+            separation_factor = np.clip((pinch_dist - 0.02) / 0.15, 0.0, 1.0)
+
+            # Actualizar hebras y almacenar el valor para otros componentes (helicasa, bucle principal)
+            self.adn_model.separate_strands(separation_factor)
+            self.hand_separation = separation_factor
+
+            # Mantener la helicasa sincronizada con la separación actual
+            if self.helicase_model:
+                self.helicase_model.update(self.hand_separation)
+
+            # Visualización de la distancia (línea) para el pinch en etapa ADN
+            if self.show_camera:
+                thumb_tip = hand_landmarks.landmark[4]
+                index_tip = hand_landmarks.landmark[8]
+                h, w, _ = frame.shape
+                thumb_pos = (int(thumb_tip.x * w), int(thumb_tip.y * h))
+                index_pos = (int(index_tip.x * w), int(index_tip.y * h))
+
+                # Color cian ↔ magenta en función de separación
+                blue = int(255 * (1.0 - separation_factor))
+                red = int(255 * separation_factor)
+                cv2.line(frame, thumb_pos, index_pos, (blue, 0, red), 3)
 
         elif self .state =='ENZYME':
             if self .enzyme_model :
@@ -856,8 +958,9 @@ class BasteriaViewerMediaPipe :
             print ("   (Modo BACTERIA)  Separar dedos = NORMAL + BLANCO + OPACO")
             print ("\n GESTOS ADICIONALES:")
             print ("   (Todos los modos)  Toca tu palma izquierda con el índice derecho para ciclar de nivel")
-            print ("   (Modo ADN)  Manos separadas/juntas = Separar/Unir hebras de ADN")
+            print ("   (Modo ADN)  Pinch (pulgar-índice) = Separar/Unir hebras de ADN")
             print ("   (Modo PCR)  Mueve la mano izquierda para replicar fragmentos de ADN")
+            print ("   (Modo PCR)  Pinch (pulgar-índice) = Activar centrifugado (rotación rápida)")
             print ("\n⌨️  Teclado:")
             print ("    C: Mostrar/Ocultar ventana de cámara")
             print ("    H: Activar/Desactivar control de manos")
@@ -904,7 +1007,10 @@ class BasteriaViewerMediaPipe :
                 if self .state =='BASTERIA'and self .basteria_model :
                     self .basteria_model .apply_vertex_shake (self .shake_intensity )
                 elif self .state =='ADN'and self .adn_model :
-                    self .adn_model .separate_strands (self .hand_separation )
+                    # La separación del ADN ahora se controla únicamente con el gesto "pinch"
+                    # de la mano izquierda.  El valor self.hand_separation será actualizado
+                    # dentro de process_left_hand, por lo que aquí no hacemos nada.
+                    pass
                 elif self .state =='ENZYME'and self .enzyme_model :
 
                     pass
